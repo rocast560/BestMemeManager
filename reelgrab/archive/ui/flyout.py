@@ -29,6 +29,20 @@ QLabel#status { color: #a1a1aa; font-size: 11px; }
 """
 
 
+def place(anchor: QRect | None, g: QRect) -> QRect:
+    """where the panel goes: above (or below) the tray icon, always inside the screen area g."""
+    h = min(H, g.height() - 8)
+    valid = anchor is not None and anchor.isValid() and not anchor.isEmpty()
+    if valid:
+        x = anchor.center().x() - W // 2
+        y = anchor.top() - h - 8 if anchor.center().y() > g.center().y() else anchor.bottom() + 8
+    else:
+        x, y = g.right() - W - 12, g.bottom() - h - 12
+    x = max(g.left() + 4, min(x, g.right() - W - 4))
+    y = max(g.top() + 4, min(y, g.bottom() - h - 4))
+    return QRect(x, y, W, h)
+
+
 class Flyout(QWidget):
     def __init__(self, ctx):
         super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
@@ -183,15 +197,9 @@ class Flyout(QWidget):
         valid = anchor is not None and anchor.isValid() and not anchor.isEmpty()
         screen = (QGuiApplication.screenAt(anchor.center()) if valid else None) \
             or QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
-        g = screen.availableGeometry()
-        if valid:
-            x = anchor.center().x() - W // 2
-            y = anchor.top() - H - 8 if anchor.center().y() > g.center().y() else anchor.bottom() + 8
-        else:
-            x, y = g.right() - W - 12, g.bottom() - H - 12
-        x = max(g.left() + 4, min(x, g.right() - W - 4))
-        y = max(g.top() + 4, min(y, g.bottom() - H - 4))
-        self.move(x, y)
+        r = place(anchor, screen.availableGeometry())
+        self.setFixedSize(r.size())
+        self.move(r.topLeft())
         self.reload_folders()
         self.refresh()
         self.show()

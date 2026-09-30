@@ -118,8 +118,14 @@ def _codec(entry: dict) -> str | None:
     return "h264"
 
 
+def can_convert() -> bool:
+    from .downloader import ffmpeg_path  # h265 picks rely on ffmpeg turning them into h264
+    return bool(ffmpeg_path())
+
+
 def pick_variant(video: dict) -> tuple[VideoVariant, str]:
-    """best encode: most pixels, then h264 over h265 (no re-encode needed), then bitrate."""
+    """best encode: most pixels, then h264 over h265 (no re-encode needed), then bitrate.
+    without ffmpeg an h265 file would stay h265 (no phone playback), so h264 comes first."""
     cands = []
     for b in video.get("bitrateInfo") or []:
         pa = b.get("PlayAddr") or {}
@@ -135,7 +141,10 @@ def pick_variant(video: dict) -> tuple[VideoVariant, str]:
         cands.append(((w * h, True, int(video.get("bitrate") or 0) - 1), VideoVariant(play, w or None, h or None), "h264"))
     if not cands:
         raise ExtractionError("tiktok returned the video but no playable stream")
-    _, variant, codec = max(cands, key=lambda c: c[0])
+    if can_convert():
+        _, variant, codec = max(cands, key=lambda c: c[0])
+    else:
+        _, variant, codec = max(cands, key=lambda c: (c[0][1], c[0][0], c[0][2]))
     return variant, codec
 
 
@@ -174,6 +183,8 @@ def _resolve_short(url: str, client) -> str:
         if r.status_code not in (301, 302, 303, 307, 308) or not loc:
             break
         url = urljoin(url, loc)
+        if not is_tiktok_url(url):  # never follow a short link off tiktok
+            break
         try:
             vid, again = parse_tiktok_url(url)
         except UnsupportedMedia:
@@ -188,6 +199,9 @@ def _resolve_short(url: str, client) -> str:
 
 
 def extract(url: str, client) -> Media:
+    url = url.strip()
+    if "://" not in url:
+        url = "https://" + url
     vid, needs_resolve = parse_tiktok_url(url)
     try:
         if needs_resolve:

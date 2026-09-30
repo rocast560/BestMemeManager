@@ -11,6 +11,7 @@ class ClipActions(QObject):
     notify = Signal(str)
     files_changed = Signal()  # something moved on disk: views should rescan
     clips_changed = Signal(list)  # metadata (favorite/tags) changed for these rels
+    sent = Signal(list)  # copied for discord: repaint tiles, but don't reorder views mid-click
 
     def __init__(self, ctx):
         super().__init__()
@@ -35,7 +36,7 @@ class ClipActions(QObject):
                 warns.append(w)
         copy_to_clipboard(paths)
         self.ctx.sender.log(rels)
-        self.clips_changed.emit(rels)
+        self.sent.emit(rels)
         self.notify.emit(warns[0] if warns else f"Copied {len(rels)} clip(s) – paste in Discord (Ctrl+V)")
 
     # ---------- metadata ----------

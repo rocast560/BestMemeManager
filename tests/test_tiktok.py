@@ -227,3 +227,35 @@ def test_live_download(tmp_path):
     codecs = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_name", "-of", "csv=p=0", path],
                             capture_output=True, text=True).stdout.split()
     assert codecs[:2] == ["h264", "aac"] or sorted(codecs) == ["aac", "h264"]
+
+
+# ---------- review fixes ----------
+
+def test_without_ffmpeg_h264_wins(monkeypatch):
+    monkeypatch.setattr(tiktok, "can_convert", lambda: False)
+    m = tiktok.parse_page(FIXTURE, VID)
+    v = m.videos[0].variants[0]
+    assert (v.width, v.height) == (576, 1024) and "/normal_540_0/" in v.url
+
+
+def test_short_link_without_scheme_uses_https():
+    c = FakeClient({"vm.tiktok.com": Resp(302, headers={"location": f"https://www.tiktok.com/@a/video/{VID}"}),
+                    f"/video/{VID}": Resp(200, FIXTURE)})
+    assert tiktok.extract("  vm.tiktok.com/ZMabc123/ ", c).shortcode == VID
+    assert c.calls[0][0] == "https://vm.tiktok.com/ZMabc123/"
+
+
+def test_short_link_hops_stay_on_tiktok():
+    c = FakeClient({"vm.tiktok.com": Resp(302, headers={"location": "https://evil.example/t/abc"})})
+    with pytest.raises(ExtractionError):
+        tiktok.extract("https://vm.tiktok.com/ZMabc123/", c)
+    assert all("evil.example" not in url for url, _ in c.calls)
+
+
+def test_thumb_proxy_does_not_follow_redirects(monkeypatch):
+    from fastapi.testclient import TestClient
+    from reelgrab import web
+    c = FakeClient({"tiktokcdn.com": Resp(200, content=b"jpg", headers={"content-type": "image/jpeg"})})
+    monkeypatch.setattr(web, "_client", c)
+    TestClient(web.app).get("/api/thumb", params={"u": "https://p16.tiktokcdn.com/a.jpeg"})
+    assert c.calls[0][1].get("allow_redirects") is False

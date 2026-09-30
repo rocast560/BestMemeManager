@@ -94,7 +94,8 @@ def thumb(u: str = Query(...)):
         raise HTTPException(400, "not an instagram/tiktok cdn url")
     with _lock:
         referer = "https://www.tiktok.com/" if host.endswith(TT_CDN_HOSTS) else BASE + "/"
-        r = _client.get(u, headers={"Referer": referer})
+        # no redirects: a redirect on an allowed cdn host must not turn this into an open proxy
+        r = _client.get(u, headers={"Referer": referer}, allow_redirects=False)
     if r.status_code != 200:
         raise HTTPException(r.status_code, "thumbnail fetch failed")
     return Response(r.content, media_type=r.headers.get("content-type", "image/jpeg"),

@@ -6,6 +6,7 @@ launch-at-login entry (HKCU Run key, no admin needed). everything points back at
 """
 
 import base64
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -46,19 +47,39 @@ def run_value(tray: bool = True) -> str:
     return f'"{target}" {args}'
 
 
-def _powershell(script: str) -> str:
-    # -EncodedCommand sidesteps every quoting problem with spaces/unicode in paths
-    script = "[Console]::OutputEncoding = [Text.Encoding]::UTF8\n" + script  # default is the oem codepage
+def _powershell(script: str, env: dict[str, str] | None = None) -> str:
+    """runs a fixed script. data goes in through RG_* environment variables, never spliced into
+    the source, so no path (quotes, typographic quotes, $, backticks) can change what runs."""
+    script = ("[Console]::OutputEncoding = [Text.Encoding]::UTF8\n"  # default is the oem codepage
+              "$ErrorActionPreference = 'Stop'\n"
+              "try {\n" + script + "\n} catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }\n")
     enc = base64.b64encode(script.encode("utf-16-le")).decode()
     r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", enc],
-                       capture_output=True, text=True, encoding="utf-8", errors="replace", creationflags=_NO_WINDOW)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       creationflags=_NO_WINDOW, env={**os.environ, **(env or {})})
     if r.returncode != 0:
         raise OSError((r.stderr or r.stdout).strip() or f"powershell exited {r.returncode}")
     return r.stdout
 
 
-def _ps_str(s: str) -> str:
-    return "'" + s.replace("'", "''") + "'"
+_SHORTCUT_PS = """
+$sh = New-Object -ComObject WScript.Shell
+$dirs = @($env:RG_DIR0, $env:RG_DIR1)
+if (-not $dirs[0]) { $dirs[0] = [Environment]::GetFolderPath('Desktop') }
+if (-not $dirs[1]) { $dirs[1] = [Environment]::GetFolderPath('Programs') }
+foreach ($d in $dirs) {
+  if (-not (Test-Path -LiteralPath $d -PathType Container)) { throw "folder not found: $d" }
+  $p = Join-Path $d ($env:RG_NAME + '.lnk')
+  $s = $sh.CreateShortcut($p)
+  $s.TargetPath = $env:RG_TARGET
+  $s.Arguments = $env:RG_ARGS
+  $s.WorkingDirectory = $env:RG_CWD
+  $s.IconLocation = $env:RG_ICON + ',0'
+  $s.Description = 'Store memes and send them to Discord fast'
+  $s.Save()
+  Write-Output $p
+}
+"""
 
 
 def create_shortcuts(desktop: Path | None = None, start_menu: Path | None = None) -> list[Path]:
@@ -66,21 +87,13 @@ def create_shortcuts(desktop: Path | None = None, start_menu: Path | None = None
         return []
     icon = ensure_icon()
     target, args = launch_command(tray=False)
-    dirs = [
-        _ps_str(str(desktop)) if desktop else "[Environment]::GetFolderPath('Desktop')",
-        _ps_str(str(start_menu)) if start_menu else "[Environment]::GetFolderPath('Programs')",
-    ]
-    script = "$sh = New-Object -ComObject WScript.Shell\n"
-    for d in dirs:
-        script += (f"$p = Join-Path ({d}) {_ps_str(APP_NAME + '.lnk')}\n"
-                   "$s = $sh.CreateShortcut($p)\n"
-                   f"$s.TargetPath = {_ps_str(target)}\n"
-                   f"$s.Arguments = {_ps_str(args)}\n"
-                   f"$s.WorkingDirectory = {_ps_str(str(REPO))}\n"
-                   f"$s.IconLocation = {_ps_str(str(icon) + ',0')}\n"
-                   "$s.Description = 'Store memes and send them to Discord fast'\n"
-                   "$s.Save()\nWrite-Output $p\n")
-    return [Path(line.strip()) for line in _powershell(script).splitlines() if line.strip()]
+    env = {"RG_TARGET": target, "RG_ARGS": args, "RG_CWD": str(REPO), "RG_ICON": str(icon), "RG_NAME": APP_NAME,
+           "RG_DIR0": str(desktop) if desktop else "", "RG_DIR1": str(start_menu) if start_menu else ""}
+    made = [Path(line.strip()) for line in _powershell(_SHORTCUT_PS, env).splitlines() if line.strip()]
+    missing = [p for p in made if not p.exists()]
+    if missing or len(made) != 2:
+        raise OSError(f"shortcut wasn't written: {missing or made}")
+    return made
 
 
 def set_startup(enabled: bool, value_name: str = APP_NAME) -> None:

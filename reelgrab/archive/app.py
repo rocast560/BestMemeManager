@@ -66,6 +66,8 @@ class Ctx:
         a.files_changed.connect(self.flyout.files_changed)
         a.clips_changed.connect(self.window.on_clips_changed)
         a.clips_changed.connect(self.flyout.clips_changed)
+        a.sent.connect(lambda rels: [self.window.grid.model().refresh_rel(r) for r in rels])
+        a.sent.connect(lambda rels: [self.flyout.grid.model().refresh_rel(r) for r in rels])
         a.notify.connect(self.window.notify)
         a.notify.connect(self.flyout.show_status)
         # poll instead of QFileSystemWatcher: on windows a watched subfolder holds a handle that

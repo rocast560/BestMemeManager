@@ -472,3 +472,33 @@ def test_flyout_popup_stays_on_screen(fly):
         if anchor is None or anchor.isEmpty():
             assert g.contains(frame) or QGuiApplication.screenAt(frame.center()) is not None
         f.hide()
+
+
+def test_tests_never_touch_real_settings(tmp_path):
+    from reelgrab.archive.settings import settings_file
+    assert str(tmp_path.parent) in str(settings_file()) or "pytest" in str(settings_file()).lower()
+
+
+def test_flyout_copy_in_recent_keeps_order(fly):
+    f = fly.flyout
+    fly.store.log_send("_inbox/a.mp4", 10)
+    fly.store.log_send("memes/sure buddy.mp4", 20)
+    f.popup(None)
+    f.set_tab("recent")
+    m = f.grid.model()
+    before = list(m.rels)
+    assert before[0] == "memes/sure buddy.mp4"
+    f.grid.clicked.emit(m.index(before.index("_inbox/a.mp4")))
+    assert m.rels == before  # no jump under the cursor; reorders next time it's shown
+    f.hide(); f.popup(None)
+    assert m.rels[0] == "_inbox/a.mp4"
+
+
+def test_flyout_placement_fits_short_screens():
+    from PySide6.QtCore import QRect
+    from reelgrab.archive.ui.flyout import place
+    g = QRect(0, 0, 1366, 480)
+    r = place(QRect(1300, 470, 24, 24), g)
+    assert g.contains(r) and r.height() <= 472
+    r = place(None, QRect(0, 0, 1920, 1040))
+    assert r.height() == 560 and QRect(0, 0, 1920, 1040).contains(r)

@@ -1,4 +1,5 @@
 import base64
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,11 +13,11 @@ TEST_VALUE = "reelgrab-test"
 
 def _read_lnk(path: Path) -> dict:
     script = ("[Console]::OutputEncoding = [Text.Encoding]::UTF8; "
-              f"$s = (New-Object -ComObject WScript.Shell).CreateShortcut('{path}'); "
+              "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:RG_LNK); "
               "Write-Output $s.TargetPath; Write-Output $s.Arguments; "
               "Write-Output $s.WorkingDirectory; Write-Output $s.IconLocation")
     enc = base64.b64encode(script.encode("utf-16-le")).decode()
-    out = subprocess.run(["powershell", "-NoProfile", "-EncodedCommand", enc],
+    out = subprocess.run(["powershell", "-NoProfile", "-EncodedCommand", enc], env={**os.environ, "RG_LNK": str(path)},
                          capture_output=True, text=True, encoding="utf-8", check=True).stdout.splitlines()
     return dict(zip(["target", "args", "cwd", "icon"], out))
 
@@ -73,3 +74,21 @@ def test_startup_toggle(fake_repo):
         winapp.set_startup(False, TEST_VALUE)  # already off: no error
     finally:
         winapp.set_startup(False, TEST_VALUE)
+
+
+def test_shortcuts_survive_typographic_quotes_in_path(tmp_path, monkeypatch):
+    from reelgrab.archive import winapp
+    repo = tmp_path / "Rob’s ‘repo’ $x `y é"
+    (repo / ".venv" / "Scripts").mkdir(parents=True)
+    (repo / ".venv" / "Scripts" / "pythonw.exe").write_bytes(b"")
+    monkeypatch.setattr(winapp, "REPO", repo)
+    desk = tmp_path / "Desk’top"
+    desk.mkdir()
+    [lnk, _] = winapp.create_shortcuts(desk, desk / "..")
+    assert _read_lnk(lnk)["cwd"] == str(repo)
+
+
+def test_shortcut_failure_is_reported(tmp_path, fake_repo):
+    from reelgrab.archive import winapp
+    with pytest.raises(OSError):
+        winapp.create_shortcuts(tmp_path / "does not exist", tmp_path / "also missing")
