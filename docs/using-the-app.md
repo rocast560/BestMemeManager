@@ -2,7 +2,7 @@
 
 ## Install
 
-You need Python 3.10+ and ffmpeg (`winget install Gyan.FFmpeg`). Double-click `start-archive.bat`. The first run makes a `.venv`, installs PySide6, and puts a "reelgrab archive" shortcut on your Desktop and in the Start menu. Use the shortcut after that.
+You need Python 3.10+ and ffmpeg (`winget install Gyan.FFmpeg`). Double-click `start-archive.bat`. The first run makes a `.venv`, installs PySide6, and puts a "BestMemeManager" shortcut on your Desktop and in the Start menu. Use the shortcut after that.
 
 To have it start with Windows, open settings (the gear) and tick "Launch at Windows startup". It starts hidden in the tray at login.
 

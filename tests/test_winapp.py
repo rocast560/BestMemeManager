@@ -52,7 +52,7 @@ def test_create_shortcuts(tmp_path, fake_repo):
     desk, start = tmp_path / "Desk top", tmp_path / "Start Menu"
     desk.mkdir(), start.mkdir()
     made = winapp.create_shortcuts(desk, start)
-    assert made == [desk / "reelgrab archive.lnk", start / "reelgrab archive.lnk"]
+    assert made == [desk / "BestMemeManager.lnk", start / "BestMemeManager.lnk"]
     info = _read_lnk(made[0])
     assert info["target"] == str(fake_repo / ".venv" / "Scripts" / "pythonw.exe")
     assert info["args"] == "-m reelgrab.archive.app"
@@ -92,3 +92,33 @@ def test_shortcut_failure_is_reported(tmp_path, fake_repo):
     from reelgrab.archive import winapp
     with pytest.raises(OSError):
         winapp.create_shortcuts(tmp_path / "does not exist", tmp_path / "also missing")
+
+
+def _lnk_app_id(path: Path) -> str:
+    script = ("[Console]::OutputEncoding = [Text.Encoding]::UTF8; $f = Get-Item -LiteralPath $env:RG_LNK; "
+              "$item = (New-Object -ComObject Shell.Application).NameSpace($f.DirectoryName).ParseName($f.Name); "
+              "Write-Output $item.ExtendedProperty('System.AppUserModel.ID')")
+    enc = base64.b64encode(script.encode("utf-16-le")).decode()
+    return subprocess.run(["powershell", "-NoProfile", "-EncodedCommand", enc], env={**os.environ, "RG_LNK": str(path)},
+                          capture_output=True, text=True, encoding="utf-8", check=True).stdout.strip()
+
+
+def test_shortcuts_carry_the_app_id(tmp_path, fake_repo):
+    from reelgrab.archive import winapp
+    desk, start = tmp_path / "d", tmp_path / "s"
+    desk.mkdir(), start.mkdir()
+    made = winapp.create_shortcuts(desk, start)
+    assert [p.name for p in made] == ["BestMemeManager.lnk", "BestMemeManager.lnk"]
+    # taskbar maps the running window (same explicit app id) to this shortcut: its icon, its name, pinnable
+    assert _lnk_app_id(made[1]) == winapp.APP_ID
+    assert _read_lnk(made[1])["args"] == "-m reelgrab.archive.app"
+
+
+def test_old_shortcut_names_are_replaced(tmp_path, fake_repo):
+    from reelgrab.archive import winapp
+    desk, start = tmp_path / "d", tmp_path / "s"
+    desk.mkdir(), start.mkdir()
+    for d in (desk, start):
+        (d / "reelgrab archive.lnk").write_bytes(b"old")
+    winapp.create_shortcuts(desk, start)
+    assert not (desk / "reelgrab archive.lnk").exists() and not (start / "reelgrab archive.lnk").exists()

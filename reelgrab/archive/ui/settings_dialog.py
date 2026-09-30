@@ -11,7 +11,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.ctx = ctx
         s = ctx.settings
-        self.setWindowTitle("reelgrab archive settings")
+        self.setWindowTitle("BestMemeManager settings")
         self.hotkey = QKeySequenceEdit(QKeySequence(s.hotkey))
         self.hotkey.setMaximumSequenceLength(1)
         self.limit = QDoubleSpinBox(minimum=1, maximum=500, decimals=0, suffix=" MB", value=s.limit_mb)
@@ -60,7 +60,7 @@ class SettingsDialog(QDialog):
             self.error.setText(f"Shortcuts: {e}")
             return
         self.error.setStyleSheet("color: #4ade80")
-        self.error.setText(f"Created {len(made)} shortcut(s) – look for \"reelgrab archive\" on the Desktop and Start menu")
+        self.error.setText(f"Created {len(made)} shortcut(s) – look for \"BestMemeManager\" on the Desktop and Start menu")
 
     def _save(self):
         text = self.hotkey.keySequence().toString(QKeySequence.PortableText)

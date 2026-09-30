@@ -1,4 +1,4 @@
-"""entry point for the reelgrab archive desktop app (windows)."""
+"""entry point for the BestMemeManager desktop app (windows)."""
 
 import getpass
 import os
@@ -88,7 +88,7 @@ class Ctx:
             return False
         if not self._told_tray:
             self._told_tray = True
-            self.tray.showMessage("reelgrab archive", f"Still running – press {self.settings.hotkey} to pick a meme.",
+            self.tray.showMessage("BestMemeManager", f"Still running – press {self.settings.hotkey} to pick a meme.",
                                   app_icon(), 4000)
         return True
 
@@ -212,10 +212,11 @@ def _single_instance(name: str) -> QLocalServer | None:
 def main() -> int:
     if win32.IS_WIN:
         import ctypes
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("reelgrab.archive")
+        from .winapp import APP_ID
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
     _load_dotenv()
     app = QApplication(sys.argv)
-    app.setApplicationName("reelgrab archive")
+    app.setApplicationName("BestMemeManager")
     app.setQuitOnLastWindowClosed(False)
     app.setWindowIcon(app_icon())
 
@@ -236,7 +237,7 @@ def main() -> int:
     server.newConnection.connect(on_connection)
 
     tray = QSystemTrayIcon(app_icon())
-    tray.setToolTip(f"reelgrab archive – {settings.hotkey} to pick a meme")
+    tray.setToolTip(f"BestMemeManager – {settings.hotkey} to pick a meme")
     menu = QMenu()
     menu.addAction("Open", ctx.show_window)
     menu.addAction("Quick panel", lambda: ctx.flyout.popup(tray.geometry()))
@@ -258,7 +259,7 @@ def main() -> int:
     if "--tray" not in sys.argv[1:]:  # launch-at-login starts hidden in the tray
         ctx.window.show()
     if not ctx.register_hotkey():
-        tray.showMessage("reelgrab archive", f"Couldn't register {settings.hotkey} – another app is using it. "
+        tray.showMessage("BestMemeManager", f"Couldn't register {settings.hotkey} – another app is using it. "
                          "Pick a different hotkey.", app_icon(), 6000)
         QTimer.singleShot(500, lambda: ctx.open_settings(focus_hotkey=True))
 
