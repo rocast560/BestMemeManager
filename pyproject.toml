@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reelgrab"
+version = "0.1.0"
+description = "Local Instagram Reels to MP4 downloader (CLI + web UI + Windows meme archive)"
+requires-python = ">=3.10"
+dependencies = [
+  "curl_cffi>=0.7",
+  "fastapi>=0.110",
+  "uvicorn>=0.29",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "httpx", "pytest-qt"]
+archive = ["PySide6>=6.6"]
+
+[project.scripts]
+reelgrab = "reelgrab.cli:main"
+reelgrab-archive = "reelgrab.archive.app:main"
+
+[tool.setuptools]
+packages = ["reelgrab", "reelgrab.archive", "reelgrab.archive.ui"]
+
+[tool.setuptools.package-data]
+reelgrab = ["static/*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

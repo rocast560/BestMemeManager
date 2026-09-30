@@ -1,0 +1,11 @@
+downloads/*
+!downloads/.gitkeep
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+build/
+start.log
+.venv/
+.superpowers/

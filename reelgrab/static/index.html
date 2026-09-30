@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>reelgrab</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --card: #fff; --fg: #1b1b1b; --muted: #6b6b6b; --line: #e3e3df;
+    --accent: #d6336c; --accent-fg: #fff; --err: #b42318;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111113; --card: #1a1a1d; --fg: #ececec; --muted: #9a9aa0; --line: #2a2a2f;
+            --accent: #f06595; --accent-fg: #111; --err: #ff8a80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 620px; margin: 0 auto; padding: 56px 16px; }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 28px; }
+  form { display: flex; gap: 8px; }
+  input[type=url] { flex: 1; min-width: 0; padding: 11px 13px; border: 1px solid var(--line);
+         border-radius: 10px; background: var(--card); color: var(--fg); font: inherit; }
+  input[type=url]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button, .btn { padding: 11px 18px; border: 0; border-radius: 10px; background: var(--accent);
+         color: var(--accent-fg); font: inherit; font-weight: 600; cursor: pointer; text-decoration: none;
+         display: inline-block; white-space: nowrap; }
+  button:disabled { opacity: .55; cursor: default; }
+  .opts { margin: 12px 2px 0; color: var(--muted); font-size: 13px; display: flex; gap: 16px; flex-wrap: wrap; }
+  .opts label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  .card { margin-top: 28px; background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+          padding: 16px; display: none; gap: 16px; }
+  .card.show { display: flex; }
+  .card img { width: 108px; aspect-ratio: 9/16; object-fit: cover; border-radius: 8px; background: var(--line); flex: none; }
+  .meta { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .user { font-weight: 600; }
+  .cap { color: var(--muted); font-size: 13px; overflow: hidden; display: -webkit-box;
+         -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+  .tags { font-size: 12px; color: var(--muted); }
+  .meta .btn { margin-top: auto; align-self: flex-start; }
+  .err { margin-top: 20px; color: var(--err); white-space: pre-wrap; font-size: 13px; }
+  footer { margin-top: 40px; color: var(--muted); font-size: 12px; }
+  @media (max-width: 480px) { form { flex-direction: column; } .card img { width: 84px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>reelgrab</h1>
+  <p class="sub">Paste an Instagram Reel link, get the MP4. Runs entirely on your machine.</p>
+
+  <form id="f">
+    <input id="url" type="url" required placeholder="https://www.instagram.com/reel/…" autocomplete="off">
+    <button id="go" type="submit">Convert</button>
+  </form>
+  <div class="opts">
+    <label><input type="radio" name="q" value="best" checked> Best quality (DASH + ffmpeg)</label>
+    <label><input type="radio" name="q" value="progressive"> Fast (single MP4)</label>
+  </div>
+
+  <div class="card" id="card">
+    <img id="thumb" alt="">
+    <div class="meta">
+      <div class="user" id="user"></div>
+      <div class="cap" id="cap"></div>
+      <div class="tags" id="tags"></div>
+      <a class="btn" id="dl" href="#">Download MP4</a>
+    </div>
+  </div>
+  <div class="err" id="err"></div>
+
+  <footer>Only download content you have the right to. Public reels only unless you configure a session cookie.</footer>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const quality = () => document.querySelector('input[name=q]:checked').value;
+
+$('f').addEventListener('submit', async e => {
+  e.preventDefault();
+  const url = $('url').value.trim();
+  $('err').textContent = ''; $('card').classList.remove('show');
+  $('go').disabled = true; $('go').textContent = 'Working…';
+  try {
+    const q = new URLSearchParams({ url, quality: quality() });
+    const r = await fetch('/api/info?' + q);
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || r.statusText);
+
+    const v = j.videos[0], p = j.plans[0];
+    $('user').textContent = j.username ? '@' + j.username : j.shortcode;
+    $('cap').textContent = j.caption || '';
+    const res = p.height ? `${p.width}×${p.height}` : 'unknown res';
+    const extra = j.videos.length > 1 ? ` · ${j.videos.length} videos (zip)` : '';
+    $('tags').textContent = `${res} · ${p.mode}${v.duration ? ' · ' + v.duration.toFixed(1) + 's' : ''}${extra} · via ${j.source}`;
+    $('thumb').src = v.thumbnail ? '/api/thumb?u=' + encodeURIComponent(v.thumbnail) : '';
+    $('dl').href = '/api/download?' + q;
+    $('card').classList.add('show');
+  } catch (err) {
+    $('err').textContent = err.message;
+  } finally {
+    $('go').disabled = false; $('go').textContent = 'Convert';
+  }
+});
+
+$('dl').addEventListener('click', () => {
+  $('dl').textContent = 'Downloading…';
+  setTimeout(() => $('dl').textContent = 'Download MP4', 4000);
+});
+</script>
+</body>
+</html>
