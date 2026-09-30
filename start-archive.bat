@@ -27,9 +27,6 @@ if errorlevel 1 (
     pause
     exit /b 1
   )
-)
-
-if not exist "%USERPROFILE%\Desktopeelgrab archive.lnk" (
   echo [reelgrab] creating Desktop and Start-menu shortcuts ...
   ".venv\Scripts\python.exe" -m reelgrab.archive.winapp --shortcuts
 )
