@@ -398,3 +398,77 @@ def test_mutating_actions_stop_hover_preview(qtbot, ap, monkeypatch):
     ctx.window._undo()
     assert len(stops) >= 2
     ctx.shutdown()
+
+
+# ---------- tray flyout ----------
+
+@pytest.fixture
+def fly(qtbot, ap, monkeypatch):
+    from reelgrab.archive.app import build
+    _touch(ap, "_inbox/a.mp4", b"a"); _touch(ap, "memes/sure buddy.mp4", b"bb"); _touch(ap, "memes/cats/c.mp4", b"ccc")
+    ctx = build(ap, limit_bytes=10 * 1024 * 1024, process=False)
+    ctx.store.set_favorite("_inbox/a.mp4", True)
+    ctx.store.log_send("memes/cats/c.mp4", 5)
+    sent = []
+    monkeypatch.setattr("reelgrab.archive.ui.actions.copy_to_clipboard", lambda paths: sent.append(paths))
+    ctx.sent = sent
+    yield ctx
+    ctx.shutdown()
+
+
+def test_flyout_tabs_folders_and_search(fly):
+    f = fly.flyout
+    f.popup(None)
+    m = f.grid.model()
+    f.set_tab("favorites")
+    assert m.rels == ["_inbox/a.mp4"]
+    f.set_tab("recent")
+    assert m.rels == ["memes/cats/c.mp4"]
+    f.set_tab("folder")
+    keys = [f.folder_box.itemData(i) for i in range(f.folder_box.count())]
+    assert keys == ["_inbox", "memes", "memes/cats"] and f.folder_box.isVisible()
+    f.folder_box.setCurrentIndex(keys.index("memes"))
+    assert m.rels == ["memes/sure buddy.mp4"]
+    f.search.setText("sure")
+    f.refresh()
+    assert m.rels == ["memes/sure buddy.mp4"]
+    f.search.setText("")
+    f.set_tab("favorites")
+    assert not f.folder_box.isVisible()
+
+
+def test_flyout_click_copies_and_logs(fly):
+    f = fly.flyout
+    f.popup(None)
+    f.set_tab("favorites")
+    f.grid.clicked.emit(f.grid.model().index(0))
+    assert fly.sent and fly.sent[0][0].name == "a.mp4"
+    assert fly.store.get("_inbox/a.mp4").send_count == 1
+    assert "Copied" in f.status.text()
+
+
+def test_flyout_actions_move_trash_undo(fly):
+    a = fly.actions
+    a.move(["_inbox/a.mp4"], "memes/cats")
+    assert fly.paths.abs("memes/cats/a.mp4").exists()
+    assert fly.store.get("memes/cats/a.mp4").favorite
+    a.trash(["memes/cats/a.mp4"])
+    assert not fly.paths.abs("memes/cats/a.mp4").exists()
+    a.undo(); a.undo()
+    assert fly.paths.abs("_inbox/a.mp4").exists()
+    fly.flyout.set_tab("folder")
+    assert "memes/cats" in [fly.flyout.folder_box.itemData(i) for i in range(fly.flyout.folder_box.count())]
+
+
+def test_flyout_popup_stays_on_screen(fly):
+    from PySide6.QtCore import QRect
+    from PySide6.QtGui import QGuiApplication
+    f = fly.flyout
+    g = QGuiApplication.primaryScreen().availableGeometry()
+    for anchor in (None, QRect(), QRect(g.right() - 10, g.bottom() + 2, 24, 24), QRect(g.left(), g.top(), 24, 24)):
+        f.popup(anchor)
+        frame = f.frameGeometry()
+        assert any(sc.availableGeometry().contains(frame) for sc in QGuiApplication.screens()), (anchor, frame)
+        if anchor is None or anchor.isEmpty():
+            assert g.contains(frame) or QGuiApplication.screenAt(frame.center()) is not None
+        f.hide()

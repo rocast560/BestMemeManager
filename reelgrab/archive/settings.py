@@ -17,6 +17,7 @@ class Settings:
     limit_mb: float = 10.0
     auto_paste: bool = True
     archive_dir: str | None = None
+    flyout_folder: str | None = None  # last folder picked in the tray window
 
     @property
     def limit_bytes(self) -> int:

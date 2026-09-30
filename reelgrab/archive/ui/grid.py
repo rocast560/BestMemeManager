@@ -11,6 +11,9 @@ from ..store import Clip
 
 TILE_W, TILE_H = 180, 330
 IMG_H = 260
+# tray flyout: 3 columns in a 380px window, no tag chips
+COMPACT = {"tile_w": 106, "tile_h": 190, "img_h": 142, "tags": False, "preview": False}
+FULL = {"tile_w": TILE_W, "tile_h": TILE_H, "img_h": IMG_H, "tags": True, "preview": True}
 ClipRole = Qt.UserRole + 1
 
 
@@ -28,9 +31,10 @@ def fmt_size(n: int) -> str:
 class ClipModel(QAbstractListModel):
     warn = Signal(str)
 
-    def __init__(self, ctx):
+    def __init__(self, ctx, size: dict = FULL):
         super().__init__()
         self.ctx = ctx
+        self.size = size
         self.rels: list[str] = []
         self._clips: dict[str, Clip] = {}
         self._pix: dict[str, QPixmap] = {}
@@ -66,7 +70,7 @@ class ClipModel(QAbstractListModel):
         if pm is None and Path(key).exists():
             pm = QPixmap(key)
             if not pm.isNull():
-                pm = pm.scaled(TILE_W - 12, IMG_H, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                pm = pm.scaled(self.size["tile_w"] - 12, self.size["img_h"], Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 self._pix[key] = pm
         return pm
 
@@ -120,12 +124,13 @@ class ClipModel(QAbstractListModel):
 
 
 class ClipDelegate(QStyledItemDelegate):
-    def __init__(self, ctx, parent=None):
+    def __init__(self, ctx, parent=None, size: dict = FULL):
         super().__init__(parent)
         self.ctx = ctx
+        self.size = size
 
     def sizeHint(self, option, index):
-        return QSize(TILE_W, TILE_H)
+        return QSize(self.size["tile_w"], self.size["tile_h"])
 
     def paint(self, p: QPainter, option, index):
         model: ClipModel = index.model()
@@ -140,7 +145,7 @@ class ClipDelegate(QStyledItemDelegate):
         p.setBrush(QColor("#2d2640") if selected else QColor("#26262b") if hover else QColor("#1e1e22"))
         p.drawRoundedRect(r, 8, 8)
 
-        img = QRect(r.left() + 2, r.top() + 2, r.width() - 4, IMG_H)
+        img = QRect(r.left() + 2, r.top() + 2, r.width() - 4, self.size["img_h"])
         p.setBrush(QColor("#000"))
         p.setPen(Qt.NoPen)
         p.drawRoundedRect(img, 6, 6)
@@ -185,7 +190,7 @@ class ClipDelegate(QStyledItemDelegate):
 
         p.setFont(small)
         x, y = r.left() + 8, name_r.bottom() + 6
-        for tag in clip.tags[:3]:
+        for tag in clip.tags[:3] if self.size["tags"] else []:
             w = fm.horizontalAdvance(tag) + 10
             if x + w > r.right() - 6:
                 break
@@ -201,22 +206,23 @@ class ClipDelegate(QStyledItemDelegate):
 class ClipGrid(QListView):
     files_dropped = Signal(list)  # external files dropped onto the grid
 
-    def __init__(self, ctx, parent=None):
+    def __init__(self, ctx, parent=None, compact: bool = False):
         super().__init__(parent)
         self.ctx = ctx
+        self.tile_size = COMPACT if compact else FULL
         self.setViewMode(QListView.IconMode)
         self.setResizeMode(QListView.Adjust)
         self.setMovement(QListView.Static)
         self.setUniformItemSizes(True)
-        self.setSpacing(4)
+        self.setSpacing(2 if compact else 4)
         self.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.setDragEnabled(True)
         self.setDragDropMode(QAbstractItemView.DragOnly)
         self.setDefaultDropAction(Qt.CopyAction)
         self.viewport().setAcceptDrops(True)
         self.setMouseTracking(True)
-        self.setItemDelegate(ClipDelegate(ctx, self))
-        self.setModel(ClipModel(ctx))
+        self.setItemDelegate(ClipDelegate(ctx, self, self.tile_size))
+        self.setModel(ClipModel(ctx, self.tile_size))
         self.internal_drop = False  # set by the folder tree when a drag lands on it
         self._hover_row = -1
         self._hover_timer = QTimer(self, singleShot=True, interval=350, timeout=self._start_preview)
@@ -233,7 +239,7 @@ class ClipGrid(QListView):
         if row != self._hover_row:
             self._stop_preview()
             self._hover_row = row
-            if row >= 0 and not e.buttons():
+            if row >= 0 and not e.buttons() and self.tile_size["preview"]:
                 self._hover_timer.start()
 
     def leaveEvent(self, e):
@@ -261,7 +267,7 @@ class ClipGrid(QListView):
             return
         idx = self.model().index(self._hover_row)
         rect = self.visualRect(idx).adjusted(6, 6, -6, 0)
-        rect.setHeight(IMG_H)
+        rect.setHeight(self.tile_size["img_h"])
         self._video.setGeometry(rect)
         self._player.setSource(QUrl.fromLocalFile(str(self.ctx.paths.abs(self.model().rel_at(self._hover_row)))))
         self._video.show()

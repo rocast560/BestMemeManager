@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (QHBoxLayout, QInputDialog, QLabel, QLineEdit, QLi
                                QMainWindow, QMenu, QPushButton, QSplitter, QVBoxLayout, QWidget)
 
 from .. import media
-from ..sending import copy_to_clipboard
 from .grid import ClipGrid
 from .icons import app_icon
 from .tree import FAVORITES, INBOX, RECENT, FolderTree
@@ -174,19 +173,14 @@ class MainWindow(QMainWindow):
         return rels[0] if rels else None
 
     def copy_selected(self) -> None:
-        rels = self.grid.selected_rels()
-        if not rels:
-            return
-        paths, warns = [], []
-        for rel in rels:
-            self.ctx.jobs.wait_shrunk(rel)
-            p, w = self.ctx.sender.send_path(rel)
-            paths.append(p)
-            if w:
-                warns.append(w)
-        copy_to_clipboard(paths)
-        self.ctx.sender.log(rels)
-        self.notify(warns[0] if warns else f"Copied {len(rels)} clip(s) – paste into Discord with Ctrl+V")
+        self.ctx.actions.copy(self.grid.selected_rels())
+
+    def on_clips_changed(self, rels: list) -> None:
+        if self.tree.current_key() in (FAVORITES, RECENT) and not self.search.text().strip():
+            self.refresh_grid()
+        else:
+            for r in rels:
+                self.grid.model().refresh_rel(r)
 
     def _open(self):
         rel = self._one()
@@ -199,28 +193,10 @@ class MainWindow(QMainWindow):
             subprocess.Popen(["explorer", "/select,", str(self.ctx.paths.abs(rel))])
 
     def _toggle_fav(self):
-        rels = self.grid.selected_rels()
-        if not rels:
-            return
-        s = self.ctx.store
-        fav = not all((s.get(r) and s.get(r).favorite) for r in rels)
-        for r in rels:
-            s.set_favorite(r, fav)
-            self.grid.model().refresh_rel(r)
-        if self.tree.current_key() == FAVORITES:
-            self.refresh_grid()
+        self.ctx.actions.toggle_favorite(self.grid.selected_rels())
 
     def _edit_tags(self):
-        rels = self.grid.selected_rels()
-        if not rels:
-            return
-        c = self.ctx.store.get(rels[0])
-        current = ", ".join(c.tags) if c else ""
-        text, ok = QInputDialog.getText(self, "Tags", "Comma-separated tags:", text=current)
-        if ok:
-            for r in rels:
-                self.ctx.store.set_tags(r, text.split(","))
-                self.grid.model().refresh_rel(r)
+        self.ctx.actions.edit_tags(self.grid.selected_rels(), self)
 
     def _rename(self, rel: str | None):
         if not rel:
@@ -243,36 +219,14 @@ class MainWindow(QMainWindow):
             self.refresh_grid()
 
     def _trash(self, rels: list[str]):
-        self.grid._stop_preview()
-        rels = [r for r in rels if r and r != INBOX]
-        if not rels:
-            return
-        try:
-            self.ctx.library.trash(rels)
-        except OSError as e:
-            self.notify(f"Delete failed: {e}")
-            return
-        self.rescan()
-        self.notify(f"Moved {len(rels)} item(s) to trash – Ctrl+Z to undo")
+        self.ctx.actions.trash(rels)
 
     def _undo(self):
-        self.grid._stop_preview()
-        if self.ctx.library.undo():
-            self.rescan()
-            self.notify("Undone")
-        else:
-            self.notify("Nothing to undo")
+        self.ctx.actions.undo()
 
     def _move_to(self, rels: list[str], dest: str):
-        self.grid._stop_preview()
         self.grid.internal_drop = True
-        try:
-            self.ctx.library.move(rels, dest)
-        except (ValueError, OSError) as e:
-            self.notify(f"Move failed: {e}")
-            return
-        self.rescan()
-        self.notify(f"Moved {len(rels)} clip(s) to {dest} – Ctrl+Z to undo")
+        self.ctx.actions.move(rels, dest)
 
     def _drop_folder(self) -> str:
         key = self.tree.current_key()

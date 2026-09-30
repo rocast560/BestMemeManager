@@ -17,6 +17,8 @@ from .paths import ArchivePaths, default_root
 from .sending import Sender
 from .settings import Settings
 from .store import Store
+from .ui.actions import ClipActions
+from .ui.flyout import Flyout
 from .ui.icons import app_icon
 from .ui.main_window import MainWindow
 from .ui.picker import Picker
@@ -54,8 +56,18 @@ class Ctx:
         self.tray: QSystemTrayIcon | None = None
         self.hotkey_win: HotkeyWindow | None = None
         self._told_tray = False
+        self.actions = ClipActions(self)
         self.window = MainWindow(self)
         self.picker = Picker(self)
+        self.flyout = Flyout(self)
+        a = self.actions
+        a.before_file_op += [lambda: self.window.grid._stop_preview(), lambda: self.flyout.grid._stop_preview()]
+        a.files_changed.connect(self.window.rescan)
+        a.files_changed.connect(self.flyout.files_changed)
+        a.clips_changed.connect(self.window.on_clips_changed)
+        a.clips_changed.connect(self.flyout.clips_changed)
+        a.notify.connect(self.window.notify)
+        a.notify.connect(self.flyout.show_status)
         # poll instead of QFileSystemWatcher: on windows a watched subfolder holds a handle that
         # blocks renaming/moving its parent, both in the app and in explorer
         self._fs_sig = None
@@ -123,6 +135,7 @@ class Ctx:
         sig = self._fs_signature()
         if self._fs_sig is not None and sig != self._fs_sig:
             self.window.rescan()
+            self.flyout.files_changed()
         self._fs_sig = sig
 
     def start_polling(self) -> None:
@@ -135,6 +148,7 @@ class Ctx:
         if self.hotkey_win is not None:
             win32.unregister_hotkey(self.hotkey_win.hwnd, HOTKEY_ID)
         self.picker.close()
+        self.flyout.close()
         self.window.hide()
         self.store.db.close()
 
@@ -223,13 +237,19 @@ def main() -> int:
     tray.setToolTip(f"reelgrab archive – {settings.hotkey} to pick a meme")
     menu = QMenu()
     menu.addAction("Open", ctx.show_window)
+    menu.addAction("Quick panel", lambda: ctx.flyout.popup(tray.geometry()))
     menu.addAction("Pick a meme…", lambda: ctx.picker.popup(0))
     menu.addAction("Settings…", ctx.open_settings)
     menu.addSeparator()
     menu.addAction("Quit", app.quit)
     tray.setContextMenu(menu)
-    tray.activated.connect(lambda reason: reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick)
-                           and ctx.show_window())
+    def on_tray(reason):
+        if reason == QSystemTrayIcon.Trigger:  # left click: compact panel next to the icon
+            ctx.flyout.toggle(tray.geometry())
+        elif reason == QSystemTrayIcon.DoubleClick:
+            ctx.flyout.hide()
+            ctx.show_window()
+    tray.activated.connect(on_tray)
     tray.show()
     ctx.tray = tray
 
