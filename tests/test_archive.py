@@ -370,7 +370,7 @@ def test_download_writes_part_then_final(monkeypatch, tmp_path):
     import reelgrab.downloader as d
     from reelgrab.models import Media, VideoItem, VideoVariant
     final = tmp_path / "someone_ABC.mp4"
-    def fake_fetch(client, url, dest, progress=None):
+    def fake_fetch(client, url, dest, progress=None, headers=None):
         assert not final.exists() and dest.endswith(".part.mp4")
         Path(dest).write_bytes(b"data")
     monkeypatch.setattr(d, "fetch", fake_fetch)

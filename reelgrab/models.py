@@ -19,6 +19,7 @@ class VideoItem:
     duration: float | None = None
     thumbnail: str | None = None
     has_audio: bool | None = None
+    http_headers: dict | None = None  # extra headers the cdn needs (tiktok wants its referer)
 
     def best_variant(self) -> VideoVariant | None:
         return max(self.variants, key=lambda v: v.pixels, default=None)

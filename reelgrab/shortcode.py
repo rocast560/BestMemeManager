@@ -24,7 +24,7 @@ def parse_url(url: str) -> tuple[str, bool]:
     parsed = urlparse(url)
     host = (parsed.hostname or "").lower()
     if not (host == "instagram.com" or host.endswith(".instagram.com") or host == "instagr.am"):
-        raise InvalidReelUrl(f"not an instagram url: {url}")
+        raise InvalidReelUrl(f"not an Instagram or TikTok link: {url}")
 
     if m := _SHARE_RE.match(parsed.path):
         return m.group(1), True

@@ -27,6 +27,7 @@ class Plan:
     height: int | None
     video_url: str
     audio_url: str | None = None
+    http_headers: dict | None = None
 
 
 def _safe(name: str) -> str:
@@ -61,7 +62,7 @@ def probe_codecs(path: str) -> dict[str, str]:
 
 def plan_for(item: VideoItem, quality: str = "best") -> Plan:
     prog = item.best_variant()
-    prog_plan = Plan("progressive", prog.width, prog.height, prog.url) if prog else None
+    prog_plan = Plan("progressive", prog.width, prog.height, prog.url, http_headers=item.http_headers) if prog else None
 
     if quality == "progressive" or not item.dash_manifest or not ffmpeg_path():
         if not prog_plan:
@@ -75,16 +76,17 @@ def plan_for(item: VideoItem, quality: str = "best") -> Plan:
 
     # only bother muxing when dash actually beats the progressive file
     if v and (not prog_plan or v.width * v.height > (prog_plan.width or 0) * (prog_plan.height or 0)):
-        return Plan("dash", v.width, v.height, v.url, a.url if a else None)
+        return Plan("dash", v.width, v.height, v.url, a.url if a else None, item.http_headers)
     if prog_plan:
         return prog_plan
     if v:
-        return Plan("dash", v.width, v.height, v.url, a.url if a else None)
+        return Plan("dash", v.width, v.height, v.url, a.url if a else None, item.http_headers)
     raise RuntimeError("couldn't find any downloadable video track")
 
 
-def fetch(client: IGClient, url: str, dest: str, progress: ProgressFn | None = None) -> None:
-    headers = {"Referer": BASE + "/", "Origin": BASE, "Accept": "*/*"}
+def fetch(client: IGClient, url: str, dest: str, progress: ProgressFn | None = None,
+          headers: dict | None = None) -> None:
+    headers = {"Accept": "*/*", **(headers or {"Referer": BASE + "/", "Origin": BASE})}
     r = client.get(url, headers=headers, stream=True, timeout=60)
     if r.status_code != 200:
         raise RuntimeError(f"cdn returned http {r.status_code} (url may have expired, re-extract)")
@@ -167,15 +169,15 @@ def download(
         plan = plan_for(item, quality)
 
         if plan.mode == "progressive":
-            fetch(client, plan.video_url, part, progress)
+            fetch(client, plan.video_url, part, progress, plan.http_headers)
         else:
             with tempfile.TemporaryDirectory() as tmp:
                 v = os.path.join(tmp, "v.mp4")
-                fetch(client, plan.video_url, v, progress)
+                fetch(client, plan.video_url, v, progress, plan.http_headers)
                 a = None
                 if plan.audio_url:
                     a = os.path.join(tmp, "a.mp4")
-                    fetch(client, plan.audio_url, a, progress)
+                    fetch(client, plan.audio_url, a, progress, plan.http_headers)
                 mux(v, a, part)
         try:
             make_compatible(part)

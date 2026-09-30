@@ -17,7 +17,9 @@ from .shortcode import InvalidReelUrl
 
 SAVE_DIR = os.environ.get("REELGRAB_SAVE_DIR")  # set in docker so files also land in the mounted volume
 STATIC = Path(__file__).parent / "static"
-CDN_HOSTS = (".cdninstagram.com", ".fbcdn.net")
+IG_CDN_HOSTS = (".cdninstagram.com", ".fbcdn.net")
+TT_CDN_HOSTS = (".tiktokcdn.com", ".tiktokcdn-us.com", ".tiktokcdn-eu.com", ".ibyteimg.com")
+CDN_HOSTS = IG_CDN_HOSTS + TT_CDN_HOSTS
 
 app = FastAPI(title="reelgrab", docs_url="/api/docs")
 
@@ -86,12 +88,13 @@ def dl(url: str = Query(...), quality: str = "best"):
 
 @app.get("/api/thumb")
 def thumb(u: str = Query(...)):
-    # ig's cdn blocks cross-origin image embeds, so proxy thumbnails (cdn hosts only, no open proxy)
+    # ig/tiktok cdns block cross-origin image embeds, so proxy thumbnails (cdn hosts only, no open proxy)
     host = urlparse(u).hostname or ""
     if urlparse(u).scheme != "https" or not host.endswith(CDN_HOSTS):
-        raise HTTPException(400, "not an instagram cdn url")
+        raise HTTPException(400, "not an instagram/tiktok cdn url")
     with _lock:
-        r = _client.get(u, headers={"Referer": BASE + "/"})
+        referer = "https://www.tiktok.com/" if host.endswith(TT_CDN_HOSTS) else BASE + "/"
+        r = _client.get(u, headers={"Referer": referer})
     if r.status_code != 200:
         raise HTTPException(r.status_code, "thumbnail fetch failed")
     return Response(r.content, media_type=r.headers.get("content-type", "image/jpeg"),

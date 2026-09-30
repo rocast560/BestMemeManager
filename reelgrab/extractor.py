@@ -247,6 +247,9 @@ def _ruling(c: IGClient, pk: int, url: str) -> str | None:
 
 
 def extract(url: str, client: IGClient | None = None, verbose: bool = False) -> Media:
+    from . import tiktok  # imported here: tiktok imports ExtractionError from this module
+    if tiktok.is_tiktok_url(url):
+        return tiktok.extract(url, client or IGClient())
     c = client or IGClient()
     code, is_share = parse_url(url)
     try:
