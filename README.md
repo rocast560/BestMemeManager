@@ -1,6 +1,6 @@
 # reelgrab
 
-Local Instagram Reels to MP4 converter. Paste a reel link, get the MP4. Web UI + CLI, runs in Docker, no third-party download sites involved. The extraction logic is written from scratch (no yt-dlp / instaloader dependency), based on how those projects talk to Instagram today.
+Local Instagram Reels and TikTok to MP4 converter. Paste a reel or TikTok link, get the MP4. Web UI + CLI, runs in Docker, no third-party download sites involved. The extraction logic is written from scratch (no yt-dlp / instaloader dependency), based on how those projects talk to Instagram today.
 
 ## Quick start (Docker)
 
@@ -37,10 +37,13 @@ Accepted inputs: `/reel/`, `/reels/`, `/p/`, `/tv/`, `/<user>/reel/`, `/share/re
 A desktop app for keeping clips in folders and getting them into Discord fast. It reads the same `downloads/` folder the Docker web UI saves to.
 
 ```powershell
-start-archive.bat        # first run creates .venv and installs PySide6
+start-archive.bat        # first run creates .venv, installs PySide6, and adds Desktop + Start-menu shortcuts
 ```
 
-- **Save:** paste a reel link in the top box. It lands in **Inbox**. You can also drop mp4s from Explorer onto the window.
+After that, open it from the **reelgrab archive** shortcut. In ⚙ Settings, tick **Launch at Windows startup** to have it start hidden in the tray at login.
+
+- **Tray panel:** left-click the tray icon (by the clock/wifi) for a compact panel. It has a link box, search, Favorites/Recent/Folder tabs with a folder dropdown, and thumbnails. Click a clip to copy it, or drag it out. Right-click to favorite, tag, move, or delete. Double-click the tray icon to open the full window.
+- **Save:** paste an Instagram reel or TikTok link in the top box. It lands in **Inbox**. You can also drop mp4s from Explorer onto the window.
 - **Organize:** drag clips onto folders. Right-click the tree for New folder / Rename / Delete. Deletes go to `downloads/.reelgrab/trash` and Ctrl+Z undoes them.
 - **Send:** select clips and press **Ctrl+C**, then **Ctrl+V** in Discord. Or drag a tile straight into Discord.
 - **Quick-picker:** **Ctrl+Shift+M** from anywhere, type, press **Enter**, and the clip is pasted into the window you were in. **Shift+Enter** only copies. Closing the window keeps the app in the tray so the hotkey keeps working.
@@ -84,6 +87,16 @@ Before that it calls `/api/v1/web/get_ruling_for_content/`, which is Instagram's
 In `best` mode (default) it parses the MPD, and if the top DASH video track beats the best progressive file, it downloads that plus the best audio track and muxes them with `ffmpeg -c copy` (no re-encode, instant). Otherwise it just saves the progressive MP4. Carousels with multiple videos produce one file each (zipped in the web UI).
 
 **5. Download.** CDN URLs (`*.cdninstagram.com`, `*.fbcdn.net`) are signed and expire after a while, so they're fetched right after extraction with an Instagram `Referer`.
+
+### TikTok (`tiktok.py`)
+
+This mirrors how yt-dlp handles TikTok today.
+- Short links (`vm.`/`vt.tiktok.com`, `/t/`) are followed to the real `/@user/video/<id>` URL.
+- The video page embeds its data in `<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__">`, and the item lives at `webapp.video-detail` → `itemInfo.itemStruct`.
+- `video.bitrateInfo` lists every encode. The downloader picks the most pixels first, then H.264 over H.265, then the highest bitrate. `downloadAddr` is the watermarked encode and is never used. H.265 picks get converted to H.264 like everything else.
+- The CDN returns 403 without a `Referer: https://www.tiktok.com/` and the cookies the page set, so items carry their own headers and share the page's session.
+- If TikTok serves its bot-check page instead (a base64 challenge where you find the number whose SHA-256 matches), `solve_waf()` answers it and the page is fetched again.
+- Photo slideshows aren't supported.
 
 ## Config
 
