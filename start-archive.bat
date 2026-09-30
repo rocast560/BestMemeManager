@@ -29,6 +29,11 @@ if errorlevel 1 (
   )
 )
 
+if not exist "%USERPROFILE%\Desktopeelgrab archive.lnk" (
+  echo [reelgrab] creating Desktop and Start-menu shortcuts ...
+  ".venv\Scripts\python.exe" -m reelgrab.archive.winapp --shortcuts
+)
+
 where ffmpeg >nul 2>nul
 if errorlevel 1 (
   echo WARNING: ffmpeg not found on PATH - thumbnails, shrinking and mobile conversion will be off.

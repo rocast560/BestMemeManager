@@ -233,7 +233,8 @@ def main() -> int:
     tray.show()
     ctx.tray = tray
 
-    ctx.window.show()
+    if "--tray" not in sys.argv[1:]:  # launch-at-login starts hidden in the tray
+        ctx.window.show()
     if not ctx.register_hotkey():
         tray.showMessage("reelgrab archive", f"Couldn't register {settings.hotkey} – another app is using it. "
                          "Pick a different hotkey.", app_icon(), 6000)

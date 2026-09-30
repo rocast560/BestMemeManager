@@ -26,6 +26,7 @@ packages = ["reelgrab", "reelgrab.archive", "reelgrab.archive.ui"]
 
 [tool.setuptools.package-data]
 reelgrab = ["static/*"]
+"reelgrab.archive" = ["assets/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

@@ -2,6 +2,7 @@ from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFormLayout,
                                QHBoxLayout, QKeySequenceEdit, QLabel, QLineEdit, QPushButton, QWidget)
 
+from .. import winapp
 from ..hotkeyspec import parse_hotkey
 
 
@@ -23,6 +24,11 @@ class SettingsDialog(QDialog):
         rl.setContentsMargins(0, 0, 0, 0)
         rl.addWidget(self.folder, 1)
         rl.addWidget(browse)
+        self.startup = QCheckBox("Launch at Windows startup (hidden in the tray)")
+        self.startup.setChecked(winapp.is_startup_enabled())
+        self.startup.setEnabled(winapp.IS_WIN)
+        shortcuts = QPushButton("Create Desktop && Start-menu shortcuts", clicked=self._shortcuts)
+        shortcuts.setEnabled(winapp.IS_WIN)
         self.error = QLabel("")
         self.error.setStyleSheet("color: #f87171")
 
@@ -32,6 +38,8 @@ class SettingsDialog(QDialog):
         form.addRow("", self.paste)
         form.addRow("Archive folder", row)
         form.addRow("", QLabel("Changing the archive folder takes effect after a restart."))
+        form.addRow("", self.startup)
+        form.addRow("", shortcuts)
         form.addRow(self.error)
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._save)
@@ -44,6 +52,15 @@ class SettingsDialog(QDialog):
         d = QFileDialog.getExistingDirectory(self, "Archive folder", self.folder.text())
         if d:
             self.folder.setText(d)
+
+    def _shortcuts(self):
+        try:
+            made = winapp.create_shortcuts()
+        except OSError as e:
+            self.error.setText(f"Shortcuts: {e}")
+            return
+        self.error.setStyleSheet("color: #4ade80")
+        self.error.setText(f"Created {len(made)} shortcut(s) – look for \"reelgrab archive\" on the Desktop and Start menu")
 
     def _save(self):
         text = self.hotkey.keySequence().toString(QKeySequence.PortableText)
@@ -58,6 +75,14 @@ class SettingsDialog(QDialog):
         s.auto_paste = self.paste.isChecked()
         folder = self.folder.text().strip()
         s.archive_dir = None if folder == str(self.ctx.paths.root) and not s.archive_dir else folder or None
+        if self.startup.isChecked() != winapp.is_startup_enabled():
+            try:
+                winapp.set_startup(self.startup.isChecked())
+            except OSError as e:
+                self.error.setStyleSheet("color: #f87171")
+                self.error.setText(f"Startup setting: {e}")
+                self.startup.setChecked(winapp.is_startup_enabled())
+                return
         s.save()
         self.ctx.apply_settings()
         self.accept()
