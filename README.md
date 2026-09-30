@@ -1,3 +1,5 @@
+(made by me)
+
 # BestMemeManager
 
 I keep a folder of reaction videos and memes for Discord, and I got tired of the loop: find the reel, download it somewhere, dig the file out of Downloads, drag it into Discord, then hear from the people on phones that it won't play. This repo fixes that loop. Paste an Instagram reel or TikTok link, get an mp4 that plays everywhere (including iPhones), keep it in folders, and get it into a Discord message with a hotkey.
